@@ -1,0 +1,32 @@
+services:
+  mysql:
+    container_name: dylan-${NODE_ENV}-mysql
+    image: mysql:8.0.25
+    platform: linux/amd64
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --sql_mode="" --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DATABASE_PASSWORD}
+      MYSQL_DATABASE: ${DATABASE_NAME}
+      MYSQL_USER: ${DATABASE_USERNAME}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+      LANG: C.UTF-8
+    ports:
+      - ${DATABASE_PORT}:3306
+    volumes:
+      - dylan_db_data:/var/lib/mysql
+
+  redis:
+    container_name: dylan-redis
+    image: redis:7-alpine
+    ports:
+      - ${REDIS_PORT}:6379
+    command: redis-server --slaveof no one
+    volumes:
+      - dylan_redis_data:/data
+
+volumes:
+  dylan_redis_data:
+    name: dylan_redis_data
+  dylan_db_data:
+    name: dylan_db_data
