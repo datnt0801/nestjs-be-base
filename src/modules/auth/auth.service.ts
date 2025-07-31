@@ -12,6 +12,8 @@ import { ConfigService } from '@nestjs/config';
 import { UserEntity } from 'src/database/entities/user.entity';
 import { JwtPayload } from 'src/modules/auth/jwt/jwt.guard';
 import { UserStatus, UserType } from 'src/constants/enum.constant';
+import { EmailHelloDto } from 'src/modules/email/dto/email-hello.dto';
+import { EmailService } from 'src/modules/email/email.service';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +24,7 @@ export class AuthService {
         private redisService: RedisService,
         private readonly jwtService: JwtService,
         private readonly configService: ConfigService,
+        private readonly emailService: EmailService,
     ) {
         this.redisClient = this.redisService.getClient();
     }
@@ -103,6 +106,14 @@ export class AuthService {
               id: userId,
             },
           });
+    }
+
+    async sendEmail(emailHelloDto: EmailHelloDto) {
+        console.log('[AuthService] Starting sendEmail with data:', emailHelloDto);
+        await this.emailService.sendEmailHello(emailHelloDto);
+        const result = {message: 'Email sent successfully'};
+        console.log('[AuthService] Email service completed successfully');
+        return result;
     }
 }
 
