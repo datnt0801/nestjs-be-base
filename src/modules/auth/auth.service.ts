@@ -12,6 +12,13 @@ import { ConfigService } from '@nestjs/config';
 import { UserEntity } from 'src/database/entities/user.entity';
 import { JwtPayload } from 'src/modules/auth/jwt/jwt.guard';
 import { UserStatus, UserType } from 'src/constants/enum.constant';
+import { EmailHelloDto } from 'src/modules/email/dto/email-hello.dto';
+import { EmailService } from 'src/modules/email/email.service';
+import { RefreshTokenDto } from 'src/modules/auth/dto/refresh-token.dto';
+import { VerifyEmailDto } from 'src/modules/email/dto/send-verify-email.dto';
+import { VerifyEmailTokenDto } from 'src/modules/auth/dto/verify-email-token.dto';
+import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
+import { ForgotPasswordEmailDto } from 'src/modules/email/dto/forgot-password-email.dto';
 
 @Injectable()
 export class AuthService {
@@ -19,9 +26,10 @@ export class AuthService {
 
     constructor(
         private readonly userRepository: UserRepository,
-        private redisService: RedisService,
+        private readonly redisService: RedisService,
         private readonly jwtService: JwtService,
         private readonly configService: ConfigService,
+        private readonly emailService: EmailService,
     ) {
         this.redisClient = this.redisService.getClient();
     }
@@ -77,7 +85,9 @@ export class AuthService {
       
       
           await this.userRepository.save(newUser);
-      
+
+          delete (newUser as any).hashPassword;
+
           return newUser;  
     }
 
@@ -104,5 +114,149 @@ export class AuthService {
             },
           });
     }
+
+    async sendEmail(emailHelloDto: EmailHelloDto) {
+        console.log('[AuthService] Starting sendEmail with data:', emailHelloDto);
+        await this.emailService.sendEmailHello(emailHelloDto);
+        const result = {message: 'Email sent successfully'};
+        console.log('[AuthService] Email service completed successfully');
+        return result;
+    }
+
+    async refreshToken(refreshTokenDto: RefreshTokenDto) {
+        const validTokenPair = createHash('sha256').update(refreshTokenDto.accessToken).digest('hex') === refreshTokenDto.refreshAccessToken;
+        if (!validTokenPair) {
+          throw new BadRequestException(ERROR_MESSAGES.INVALID_TOKEN);
+        }
+
+        const userId = await this.redisClient.get(`REFRESH_TOKEN_PREFIX_${refreshTokenDto.refreshAccessToken}`);
+        const user = await this.userRepository.findOne({
+          where: {
+            id: Number(userId),
+          },
+        });
+        if (!user) {
+          throw new BadRequestException(ERROR_MESSAGES.USER_NOT_FOUND);
+        }
+
+        await this.redisClient.del(`REFRESH_TOKEN_PREFIX_${refreshTokenDto.refreshAccessToken}`);
+        await this.redisClient.del(`USER_ID_LOGIN_PREFIX_${user.id}_${refreshTokenDto.refreshAccessToken}`);
+        
+        return await this.generateCredentials(user);
+    }
+
+
+
+    async signOut(userId: number, accessToken: string) {
+        const refreshAccessToken = createHash('sha256').update(accessToken).digest('hex');
+        await this.redisClient.del(`REFRESH_TOKEN_PREFIX_${refreshAccessToken}`);
+        await this.redisClient.del(`USER_ID_LOGIN_PREFIX_${userId}_${refreshAccessToken}`);
+        return {message: 'Sign out successfully'};
+    }
+
+    async signOutAllDevices(userId: number) {
+      const loginPrefixPattern = `USER_ID_LOGIN_PREFIX_${userId}_*`;
+    
+      const userLoginKeys = await this.redisClient.keys(loginPrefixPattern);
+    
+      if (userLoginKeys.length === 0) {
+        return { message: 'No sessions found' };
+      }
+    
+      const pipeline = this.redisClient.multi();
+      for (const key of userLoginKeys) {
+        pipeline.get(key); 
+      }
+    
+      const refreshTokenKeys = await pipeline.exec().then(results =>
+        results?.map(([err, val]) => (err ? null : val))
+          .filter((val): val is string => typeof val === 'string'),
+      );
+    
+      const keysToDelete = [...userLoginKeys, ...refreshTokenKeys||[]];
+      if (keysToDelete.length > 0) {
+        await this.redisClient.del(...keysToDelete);
+      }
+    
+      return { message: `Signed out all devices for user ${userId}` };
+    }
+
+    async sendVerificationEmail(payload: JwtPayload) {
+        const user = await this.userRepository.findOne({
+            where: {
+              id: payload.userId,
+            },
+          });
+        if (!user) {
+          throw new BadRequestException(ERROR_MESSAGES.USER_NOT_FOUND);
+        }
+
+        const verifyToken = createHash('sha256').update(Date.now().toString()).digest('hex');
+        await this.redisClient.set(`VERIFY_TOKEN_PREFIX_${verifyToken}`, user.id, 'EX', Number(this.configService.get('EMAIL_VERIFY_TOKEN_EXPIRATION_TIME')));
+        await this.redisClient.set(`USER_ID_VERIFY_TOKEN_PREFIX_${user.id}`, verifyToken, 'EX', Number(this.configService.get('EMAIL_VERIFY_TOKEN_EXPIRATION_TIME')));
+        const verifyEmailDto: VerifyEmailDto = {
+            to: user.email,
+            emailSubject: 'Verify your email',
+            verifyEmailUrl: `${this.configService.get('EMAIL_FRONTEND_VERIFY_URL')}?verify-token=${verifyToken}`,
+        };
+        const result = await this.emailService.sendEmailVerify(verifyEmailDto);
+        if (!result) {
+          return {message: 'Verification email sent failed'};
+        }
+        return {message: 'Verification email sent successfully'};
+    }
+
+    async verifyEmail(verifyTokenDto: VerifyEmailTokenDto) {
+        const userId = await this.redisClient.get(`VERIFY_TOKEN_PREFIX_${verifyTokenDto.verifyToken}`);
+
+        console.log('[AuthService] verifyEmail key:', this.redisClient.get(`VERIFY_TOKEN_PREFIX_${verifyTokenDto.verifyToken}`));
+        console.log('[AuthService] verifyEmail key:', `VERIFY_TOKEN_PREFIX_${verifyTokenDto.verifyToken}`);
+        console.log('[AuthService] verifyEmail userId:', userId);
+        console.log('[AuthService] verifyEmail verifyTokenDto:', verifyTokenDto);
+        if (!userId) {
+          throw new BadRequestException(ERROR_MESSAGES.INVALID_TOKEN);
+        }
+        const user = await this.userRepository.findOne({
+            where: {
+              id: Number(userId),
+            },
+          });
+        if (!user) {
+          throw new BadRequestException(ERROR_MESSAGES.USER_NOT_FOUND);
+        }
+        user.emailVerified = true;
+        await this.userRepository.save(user);
+        await this.redisClient.del(`USER_ID_VERIFY_TOKEN_PREFIX_${user.id}`);
+        await this.redisClient.del(`VERIFY_TOKEN_PREFIX_${verifyTokenDto.verifyToken}`);
+        return {message: 'Email verified successfully'};
+    }
+
+    async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+        const user = await this.userRepository.findOne({
+            where: {
+              email: forgotPasswordDto.email,
+            },
+          });
+        if (!user) {
+          throw new BadRequestException(ERROR_MESSAGES.USER_NOT_FOUND);
+        }
+
+        const forgotPasswordToken = createHash('sha256').update(Date.now().toString()).digest('hex');
+
+        await this.redisClient.set(`FORGOT_PASSWORD_TOKEN_PREFIX_${forgotPasswordToken}`, user.id, 'EX', Number(this.configService.get('EMAIL_VERIFY_TOKEN_EXPIRATION_TIME')));
+        await this.redisClient.set(`USER_ID_FORGOT_PASSWORD_TOKEN_PREFIX_${user.id}`, forgotPasswordToken, 'EX', Number(this.configService.get('EMAIL_VERIFY_TOKEN_EXPIRATION_TIME')));
+        
+        const forgotPasswordEmailDto: ForgotPasswordEmailDto = {
+            to: user.email,
+            emailSubject: 'Forgot Password',
+            forgotPasswordUrl: `${this.configService.get('EMAIL_FRONTEND_FORGOT_PASSWORD_URL')}?forgot-password-token=${forgotPasswordToken}`,
+        };
+        const result = await this.emailService.sendEmailForgotPassword(forgotPasswordEmailDto);
+
+        if (!result) {
+          return {message: 'Forgot password email sent failed'};
+        }
+        return {message: 'Forgot password email sent successfully'};
+    } 
 }
 
