@@ -8,6 +8,9 @@ import { JwtStrategy } from 'src/modules/auth/jwt/jwt.strategy';
 import { RequestLogMiddleware } from 'src/shared/middlewares/request-log.middleware';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { BullModule } from '@nestjs/bullmq';
+import { queueRedisOptions } from 'src/configs/queue.config';
+import { EmailModule } from 'src/modules/email/email.module';
 
 @Module({
   imports: [
@@ -19,6 +22,9 @@ import { PassportModule } from '@nestjs/passport';
     RedisModule.forRootAsync({
       useFactory: () => redisConfig,
     }),
+    BullModule.forRoot({
+      connection: queueRedisOptions,
+    }),
     PassportModule,
     JwtModule.register({
       signOptions: {
@@ -28,6 +34,7 @@ import { PassportModule } from '@nestjs/passport';
       global: true,
     }),
     AuthModule,
+    EmailModule,
   ],
   controllers: [],
   providers: [JwtStrategy],

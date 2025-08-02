@@ -1,22 +1,22 @@
 import { BaseEntity } from "src/database/entities/base.entity";
 import { Column, Entity } from "typeorm";
-import { Exclude } from "class-transformer";
 import { UserStatus, UserType } from "src/constants/enum.constant";
 
 @Entity({
     name: 'users',
 })
 export class UserEntity extends BaseEntity {
+ 
   @Column({
     unique: true,
     name: 'email',
   })
   email: string;
 
+  
   @Column({
     name: 'hash_password',
   })
-  @Exclude()
   hashPassword: string;
 
   @Column({
@@ -27,8 +27,8 @@ export class UserEntity extends BaseEntity {
   @Column({
     name: 'google_user_id',
   })
-  @Exclude()
   googleUserId?: string;
+
 
   @Column({
     name: 'email_verified',
