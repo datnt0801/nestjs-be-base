@@ -3,4 +3,5 @@ export const ERROR_MESSAGES = {
     USER_ALREADY_EXISTS: 'User already exists',
     USER_NOT_FOUND: 'User not found',
     UNAUTHORIZED: 'Unauthorized',
+    INVALID_TOKEN: 'Invalid token',
 }

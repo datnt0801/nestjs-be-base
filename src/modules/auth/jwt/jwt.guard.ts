@@ -47,7 +47,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       if (!redisCheckAccessToken) {
         this.logger.error('Undefined hashedAccessToken in redis');
 
-        throw new UnauthorizedException(ERROR_MESSAGES.UNAUTHORIZED, 'Không được cấp quyền truy cập!');
+        throw new UnauthorizedException(ERROR_MESSAGES.UNAUTHORIZED);
       }
 
       const payload = await this.jwtService.verifyAsync(accessToken);
@@ -58,7 +58,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     } catch (error) {
       this.logger.error(error);
 
-      throw new UnauthorizedException(ERROR_MESSAGES.UNAUTHORIZED, 'Không được cấp quyền truy cập!');
+      throw new UnauthorizedException(ERROR_MESSAGES.UNAUTHORIZED);
     }
   }
 }
