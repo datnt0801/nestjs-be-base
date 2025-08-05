@@ -1,3 +1,5 @@
+import { EmailForgotPasswordDto } from './../email/dto/email-forgot-password.dto';
+import { config } from 'dotenv';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
 import { BadRequestException, Injectable } from '@nestjs/common';
@@ -18,7 +20,7 @@ import { RefreshTokenDto } from 'src/modules/auth/dto/refresh-token.dto';
 import { VerifyEmailDto } from 'src/modules/email/dto/send-verify-email.dto';
 import { VerifyEmailTokenDto } from 'src/modules/auth/dto/verify-email-token.dto';
 import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
-import { ForgotPasswordEmailDto } from 'src/modules/email/dto/forgot-password-email.dto';
+import { VerifyForgotPasswordDto } from 'src/modules/auth/dto/verify-forgot-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -33,6 +35,8 @@ export class AuthService {
     ) {
         this.redisClient = this.redisService.getClient();
     }
+
+    
 
     async generateCredentials(user: UserEntity) {
         const payload: JwtPayload = { userId: user.id, userType: user.userType };
@@ -244,19 +248,44 @@ export class AuthService {
         const forgotPasswordToken = createHash('sha256').update(Date.now().toString()).digest('hex');
 
         await this.redisClient.set(`FORGOT_PASSWORD_TOKEN_PREFIX_${forgotPasswordToken}`, user.id, 'EX', Number(this.configService.get('EMAIL_VERIFY_TOKEN_EXPIRATION_TIME')));
-        await this.redisClient.set(`USER_ID_FORGOT_PASSWORD_TOKEN_PREFIX_${user.id}`, forgotPasswordToken, 'EX', Number(this.configService.get('EMAIL_VERIFY_TOKEN_EXPIRATION_TIME')));
+        await this.redisClient.set(`FORGOT_PASSWORD_USER_ID_PREFIX_${user.id}`, forgotPasswordToken, 'EX', Number(this.configService.get('EMAIL_VERIFY_TOKEN_EXPIRATION_TIME')));
         
-        const forgotPasswordEmailDto: ForgotPasswordEmailDto = {
+        const emailForgotPasswordDto: EmailForgotPasswordDto = {
             to: user.email,
             emailSubject: 'Forgot Password',
             forgotPasswordUrl: `${this.configService.get('EMAIL_FRONTEND_FORGOT_PASSWORD_URL')}?forgot-password-token=${forgotPasswordToken}`,
         };
-        const result = await this.emailService.sendEmailForgotPassword(forgotPasswordEmailDto);
-
+        console.log('[AuthService] Starting sendEmailForgotPassword with data:', emailForgotPasswordDto);
+        console.log('[AuthService] Reset password URL:', emailForgotPasswordDto.forgotPasswordUrl);
+        const result = await this.emailService.sendEmailForgotPassword(emailForgotPasswordDto);
+        console.log('[AuthService] Email service completed successfully');
         if (!result) {
           return {message: 'Forgot password email sent failed'};
         }
-        return {message: 'Forgot password email sent successfully'};
-    } 
+        return {message: `Forgot password email sent to ${emailForgotPasswordDto.to} successfully`};
+    }
+
+    async verifyForgotPasswordToken(verifyForgotPasswordDto: VerifyForgotPasswordDto) {
+        const userId = await this.redisClient.get(`FORGOT_PASSWORD_TOKEN_PREFIX_${verifyForgotPasswordDto.token}`);
+        console.log('[AuthService] verifyForgotPasswordToken userId:', userId);
+        console.log('[AuthService] verifyForgotPasswordToken token:', verifyForgotPasswordDto.token);
+        console.log('[AuthService] verifyForgotPasswordDto:', verifyForgotPasswordDto);
+        if (!userId) {
+          throw new BadRequestException(ERROR_MESSAGES.INVALID_TOKEN);
+        }
+        const user = await this.userRepository.findOne({
+            where: {
+              id: Number(userId),
+            },
+          });
+        if (!user) {
+          throw new BadRequestException(ERROR_MESSAGES.USER_NOT_FOUND);
+        }
+        user.hashPassword = bcrypt.hashSync(verifyForgotPasswordDto.newPassword, 10);
+        await this.userRepository.save(user);
+        await this.redisClient.del(`FORGOT_PASSWORD_USER_ID_PREFIX_${user.id}`);
+        await this.redisClient.del(`FORGOT_PASSWORD_TOKEN_PREFIX_${verifyForgotPasswordDto.token}`);
+        return {message: 'Forgot password verified successfully', User: user};
+    }
 }
 

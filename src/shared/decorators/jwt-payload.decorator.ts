@@ -12,5 +12,5 @@ export const GetJwtPayload = createParamDecorator((data, ctx) => {
 
   logger.log('Undefined jwt payload in request');
 
-  throw new UnauthorizedException(ERROR_MESSAGES.UNAUTHORIZED, 'Không được cấp quyền truy cập!');
+  throw new UnauthorizedException(ERROR_MESSAGES.UNAUTHORIZED);
 });

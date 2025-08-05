@@ -21,7 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!payload.userId) {
       this.logger.error('Undefined userId in jwt payload');
 
-      throw new UnauthorizedException(ERROR_MESSAGES.UNAUTHORIZED, 'Không được cấp quyền truy cập!');
+      throw new UnauthorizedException(ERROR_MESSAGES.UNAUTHORIZED);
     }
 
     return true;

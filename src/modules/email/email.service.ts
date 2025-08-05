@@ -4,7 +4,7 @@ import { Queue } from 'bullmq';
 import { QueueJobs, QueueNames } from 'src/constants/queue.constant';
 import { VerifyEmailDto } from 'src/modules/email/dto/send-verify-email.dto';
 import { EmailHelloDto } from 'src/modules/email/dto/email-hello.dto';
-import { ForgotPasswordEmailDto } from 'src/modules/email/dto/forgot-password-email.dto';
+import { EmailForgotPasswordDto } from 'src/modules/email/dto/email-forgot-password.dto';
 
 
 @Injectable()
@@ -40,14 +40,15 @@ export class EmailService {
     return job;
   }
 
-  async sendEmailForgotPassword(forgotPasswordEmailDto: ForgotPasswordEmailDto) {
+  async sendEmailForgotPassword(emailForgotPasswordDto: EmailForgotPasswordDto) {
+    console.log('[EmailService] Starting sendEmailForgotPassword with data:', typeof emailForgotPasswordDto.forgotPasswordUrl);
     const job = await this.mailQueue.add(QueueJobs.SEND_EMAIL, {
-      to: forgotPasswordEmailDto.to,
-      subject: forgotPasswordEmailDto.emailSubject,
+      to: emailForgotPasswordDto.to,
+      subject: emailForgotPasswordDto.emailSubject,
       template: 'forgot-password',
       context: {
-        emailSubject: forgotPasswordEmailDto.emailSubject,
-        forgotPasswordUrl: forgotPasswordEmailDto.forgotPasswordUrl,
+        emailSubject: emailForgotPasswordDto.emailSubject,
+        forgotPasswordUrl: emailForgotPasswordDto.forgotPasswordUrl,
       },
     });
     return job;
