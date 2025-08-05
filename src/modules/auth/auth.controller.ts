@@ -14,6 +14,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyEmailDto } from 'src/modules/email/dto/send-verify-email.dto';
 import { VerifyEmailTokenDto } from 'src/modules/auth/dto/verify-email-token.dto';
 import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
+import { VerifyForgotPasswordDto } from 'src/modules/auth/dto/verify-forgot-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -125,13 +126,13 @@ export class AuthController {
         return this.authService.forgotPassword(forgotPasswordDto);
     }
 
-    // @Post('/verify-forgot-password-token')
-    // @ApiOperation({
-    //     summary: 'Verify forgot password token',
-    //     description: 'Verify forgot password token',
-    // })
-    // verifyForgotPasswordToken(@Body() verifyForgotPasswordTokenDto: VerifyForgotPasswordTokenDto) {
-    //     return this.authService.verifyForgotPasswordToken(verifyForgotPasswordTokenDto);
-    // }
+    @Post('/verify-forgot-password-token')
+    @ApiOperation({
+        summary: 'Verify forgot password token',
+        description: 'Verify forgot password token',
+    })
+    verifyForgotPasswordToken(@Body() verifyForgotPasswordDto: VerifyForgotPasswordDto) {
+        return this.authService.verifyForgotPasswordToken(verifyForgotPasswordDto);
+    }
 
 }
